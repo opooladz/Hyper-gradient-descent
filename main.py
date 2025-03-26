@@ -16,14 +16,7 @@ class HyperGradientDescent(Optimizer):
         defaults = dict(lr=lr, beta_lr=beta_lr, adagrad_eps=adagrad_eps,
                         initial_P=initial_P, initial_beta=initial_beta)
         super(HyperGradientDescent, self).__init__(params, defaults)
-        for group in self.param_groups:
-            for p in group['params']:
-                state = self.state[p]
-                state['prev'] = p.data.clone()
-                state['P'] = group['initial_P']  # Scalar
-                state['G'] = 0.0                 # Scalar accumulator for P
-                state['beta'] = group['initial_beta']  # Scalar
-                state['Gm'] = 0.0                # Scalar accumulator for beta
+
 
     def step(self, closure=None):
         loss = None
@@ -36,6 +29,15 @@ class HyperGradientDescent(Optimizer):
             for p in group['params']:
                 if p.grad is None:
                     continue
+
+                state = self.state[p]
+                if len(state) == 0:
+                    state['prev'] = p.data.clone()
+                    state['P'] = torch.zeros((), dtype=torch.float64, device=p.device) + group['initial_P']
+                    state['G'] = torch.zeros((), dtype=torch.float64, device=p.device)              
+                    state['beta'] = torch.zeros((), dtype=torch.float64, device=p.device) + group['initial_beta']  # Scalar
+                    state['Gm'] = torch.zeros((), dtype=torch.float64, device=p.device)                  # Scalar accumulator for beta
+                
                 grad = p.grad.data
                 state = self.state[p]
                 current_param = p.data
@@ -46,25 +48,25 @@ class HyperGradientDescent(Optimizer):
                 candidate = current_param - (P * grad) + (beta * (current_param - state['prev']))
                 
                 # Compute denominator (norm squared of gradients)
-                denom = grad.pow(2).sum().item() + 1e-12
+                denom = grad.square().sum() + 1e-12
                 
                 # Hypergradient for P
                 candidate_grad = grad  # Simplified assumption
-                gr = - torch.dot(candidate_grad.view(-1), grad.view(-1)).item() / denom
-                state['G'] += gr ** 2
-                new_P = P - (lr * gr) / (math.sqrt(state['G']) + adagrad_eps)
-                state['P'] = new_P
+                gr = - candidate_grad.view(-1) @ (grad.view(-1) / denom)  # pre-divide for numerical stability
+                state['G'].addcmul_(gr, gr)
+                new_P = P - (lr * gr) / (state['G'] ** 0.5 + adagrad_eps)
+                state['P'].copy_(new_P)
                 
                 # Hypergradient for beta
                 diff = current_param - state['prev']
-                gm = torch.dot(candidate_grad.view(-1), diff.view(-1)).item() / denom
-                state['Gm'] += gm ** 2
-                new_beta = beta - (beta_lr * gm) / (math.sqrt(state['Gm']) + adagrad_eps)
-                new_beta = max(0.0, min(new_beta, 0.9995))
-                state['beta'] = new_beta
+                gm = candidate_grad.view(-1) @ (diff.view(-1) / denom)
+                state['Gm'].addcmul_(gm, gm)
+                new_beta = beta - (beta_lr * gm) / (state['Gm'] ** 0.5 + adagrad_eps)
+                new_beta = new_beta.clamp_(min=0, max=0.9995)
+                state['beta'].copy_(new_beta)
                 
                 # Update parameter and previous value
-                state['prev'] = current_param.clone()
+                state['prev'].copy_(current_param)
                 p.data.copy_(candidate)
         return loss
 
