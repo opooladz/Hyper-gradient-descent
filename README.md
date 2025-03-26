@@ -1,4 +1,3 @@
-```markdown
 # HyperGradientDescent Optimizer for Rosenbrock Function Optimization
 
 PyTorch implementation of a hypergradient descent optimizer with momentum, applied to minimize the Rosenbrock function. Includes visualization of the optimization trajectory.
@@ -13,8 +12,8 @@ PyTorch implementation of a hypergradient descent optimizer with momentum, appli
 ## Installation
 
 ```bash
-git clone [your-repo-url]
-cd [your-repo-directory]
+git clone https://github.com/opooladz/Hyper-gradient-descent
+cd Hyper-gradient-descent
 pip install torch matplotlib numpy
 ```
 
@@ -74,4 +73,3 @@ Where both `Pₜ` (learning rate) and `βₜ` (momentum) are adapted using AdaGr
 ## License
 
 [MIT License](LICENSE)
-```
